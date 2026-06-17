@@ -434,7 +434,7 @@ async def check_document(
     if check_key in P.OCR_RULE_KEYS:
         if not api_key:
             raise HTTPException(400, "Groq API key required for OCR")
-        if check_key == "storey_roof":
+        if check_key in ("storey_roof", "scissor_lift"):
             doc_text = ocr_file_with_groq(dest, api_key, prompt=P.STOREY_PROMPT)
         else:
             doc_text = ocr_file_with_groq(dest, api_key)
@@ -488,6 +488,117 @@ async def download_excel(session_id: str):
         raise HTTPException(404, "File not found")
     return FileResponse(str(path), filename="QC_Results.xlsx",
                         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+@app.post("/api/upload-excel")
+async def upload_excel(
+    request: Request,
+    file: UploadFile = File(...),
+    session_id: str = Form(""),
+):
+    """
+    Import a pre-filled QC checklist Excel file.
+    If session_id is provided, attaches results to that existing session
+    (used after the PDF agreement is already uploaded).
+    Otherwise creates a new session.
+    """
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(401, "Not authenticated")
+
+    suffix = Path(file.filename).suffix.lower()
+    if suffix not in (".xlsx", ".xls"):
+        raise HTTPException(400, "Only .xlsx / .xls files are supported")
+
+    raw = await file.read()
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(raw), data_only=True)
+    except Exception as e:
+        raise HTTPException(400, f"Could not read Excel file: {e}")
+
+    ws = wb.active
+
+    qc_items  = get_qc_items()
+    label_map = {item["label"].strip().lower(): item for item in qc_items}
+    key_map   = {item["key"].strip().lower():   item for item in qc_items}
+
+    if not session_id:
+        session_id = str(uuid.uuid4())[:8]
+
+    sess_dir = UPLOAD_DIR / session_id
+    sess_dir.mkdir(parents=True, exist_ok=True)
+
+    customer_name = ""
+    address       = ""
+    imported      = []
+
+    for row in ws.iter_rows(values_only=True):
+        if not row:
+            continue
+
+        cells = [str(c).strip() if c is not None else "" for c in row]
+
+        # Pick up customer/address from header block rows
+        if len(cells) >= 2:
+            label_cell = cells[0].lower().rstrip(" :")
+            if label_cell in ("customer name", "customer") and cells[1]:
+                customer_name = cells[1]
+            elif label_cell == "address" and cells[1]:
+                address = cells[1]
+
+        # Detect data rows by matching key or label in first two cols
+        item = None
+        for col_idx in (0, 1):
+            if col_idx >= len(cells):
+                continue
+            val = cells[col_idx].strip().lower()
+            if val in key_map:
+                item = key_map[val]
+                break
+            if val in label_map:
+                item = label_map[val]
+                break
+
+        if not item:
+            continue
+
+        result_val = ""
+        remark     = ""
+        filename   = ""
+        for idx in (2, 3):
+            if idx < len(cells) and cells[idx].lower() in ("yes", "no", "n/a", "—", "-"):
+                result_val = cells[idx].strip()
+                if result_val in ("—", "-"):
+                    result_val = "N/A"
+                remark   = cells[idx + 1] if idx + 1 < len(cells) else ""
+                filename = cells[idx + 2] if idx + 2 < len(cells) else ""
+                break
+
+        if not result_val:
+            continue
+
+        auth.upsert_check_result(session_id, item["key"], result_val, remark, filename, "")
+        imported.append({
+            "sno":      item["sno"],
+            "label":    item["label"],
+            "key":      item["key"],
+            "result":   result_val,
+            "remark":   remark,
+            "filename": filename,
+        })
+
+    # Only upsert project if no session existed (standalone Excel-only flow)
+    if not auth.get_project(session_id):
+        auth.upsert_project(session_id, user["id"], customer_name, address, file.filename)
+
+    return JSONResponse({
+        "ok":           True,
+        "session_id":   session_id,
+        "customer_name": customer_name,
+        "address":      address,
+        "results":      imported,
+        "imported":     len(imported),
+    })
 
 
 @app.post("/api/mark-na")
@@ -619,7 +730,7 @@ async def batch_check(
 
     # Files that should run two checks from one image
     DUAL_KEY_MAP = {
-        "roof_pic": ["roof_pic", "storey_roof"],
+        "roof_pic": ["roof_pic", "storey_roof", "scissor_lift"],
     }
 
     def _resolve_keys(stem_lower: str) -> list[str]:
@@ -693,7 +804,7 @@ async def batch_check(
                     if not api_key:
                         results_list.append(_save("N/A", "Groq API key not configured — skipped"))
                         continue
-                    ocr_prompt = P.STOREY_PROMPT if check_key == "storey_roof" else None
+                    ocr_prompt = P.STOREY_PROMPT if check_key in ("storey_roof", "scissor_lift") else None
                     cache_key  = ocr_prompt or "__default__"
                     if cache_key not in cached_ocr:
                         cached_ocr[cache_key] = ocr_file_with_groq(dest, api_key, prompt=ocr_prompt)

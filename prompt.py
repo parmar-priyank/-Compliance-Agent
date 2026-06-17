@@ -32,7 +32,7 @@ VALID_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png"}
 # Everything else → OCR the file, then call the Groq LLM.
 
 NO_OCR_KEYS   = {"signed_agreement", "meter_photo", "roof_pic"}
-OCR_RULE_KEYS = {"deposit", "phase_upgrade", "storey_roof", "electricity_bill", "rate_notice"}
+OCR_RULE_KEYS = {"deposit", "phase_upgrade", "storey_roof", "electricity_bill", "rate_notice", "scissor_lift"}
 
 
 # ── AI / Vision prompts ──────────────────────────────────────────────────────
@@ -554,6 +554,43 @@ def run_item_rule(check_key: str, filename: str, doc_text: str, agreement_text: 
             return {"result": "No",  "remark": combined_remark}
         # One passed, one failed → N/A with remark explaining what's wrong
         return {"result": "N/A", "remark": combined_remark}
+
+    # ── scissor_lift: required if house is 2+ storeys ────────────────────────
+    # Triggered by house.png (same image as roof_pic / storey_roof).
+    # Primary: parse storeys from the vision model OCR output of the house image.
+    # Fallback: use quote_data extracted from the agreement PDF.
+    if check_key == "scissor_lift":
+        detected_storeys = ""
+        doc_lower = doc_text.lower()
+
+        # Parse vision model response (same format as STOREY_PROMPT)
+        for line in doc_text.splitlines():
+            if line.strip().lower().startswith("storeys:"):
+                detected_storeys = line.split(":", 1)[-1].strip().lower()
+                break
+
+        # Keyword fallback if model didn't use exact format
+        if not detected_storeys:
+            if any(w in doc_lower for w in ("double storey", "two storey", "2 storey", "2 floor", "second floor", "upper floor")):
+                detected_storeys = "double storey"
+            elif any(w in doc_lower for w in ("single storey", "one storey", "1 storey", "1 floor", "ground floor only")):
+                detected_storeys = "single storey"
+
+        # Fallback: use stories from quote_data (agreement PDF extraction)
+        if not detected_storeys and quote:
+            stories_raw = str(quote.get("stories") or "").strip().lower()
+            if any(w in stories_raw for w in ("2", "two", "double", "multi", "3", "three", "triple")):
+                detected_storeys = "double storey"
+            elif any(w in stories_raw for w in ("1", "one", "single")):
+                detected_storeys = "single storey"
+
+        if not detected_storeys:
+            return {"result": "N/A", "remark": "Could not determine storey count from house image or agreement — check manually"}
+
+        is_multi = "double" in detected_storeys or "2" in detected_storeys
+        if is_multi:
+            return {"result": "Yes", "remark": f"House is {detected_storeys} — scissor lift required"}
+        return {"result": "No", "remark": f"House is {detected_storeys} — scissor lift not required"}
 
     # ── Add new rules above this line ────────────────────────────────────────
     # Return None to let the generic AI handle everything else.

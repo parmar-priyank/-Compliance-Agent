@@ -2,8 +2,6 @@ const QC_ITEMS = window.__QC_ITEMS__;
 let sessionId = null;
 let results   = {};
 
-const STORE_KEY = 'qc_session';
-
 // ── Auth helpers ──────────────────────────────────────────────────────────
 function authToken() {
   return sessionStorage.getItem('qc_token') || '';
@@ -46,6 +44,9 @@ async function confirmSignOut() {
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────
+// Clear any stale localStorage from previous versions — DB is source of truth
+localStorage.removeItem('qc_session');
+
 (async function bootAuth() {
   const token = authToken();
   if (!token) { window.location.href = '/login'; return; }
@@ -64,10 +65,7 @@ async function confirmSignOut() {
   document.getElementById('topbar-username').textContent = name;
   document.getElementById('topbar-avatar').textContent   = name[0].toUpperCase();
 
-  // Try localStorage first (fast restore with full results)
-  if (restoreState()) return;
-
-  // Check server for last saved project
+  // Always load from the database — never from localStorage
   try {
     const r    = await authFetch('/api/my-last-project');
     const data = await r.json();
@@ -106,7 +104,6 @@ function resumeProject() {
 
   updateStats();
   showAppScreen();
-  saveState();
 }
 
 function dismissResume() {
@@ -114,69 +111,97 @@ function dismissResume() {
   document.getElementById('resume-banner').style.display = 'none';
 }
 
-// ── Persistence ───────────────────────────────────────────────────────────
+// ── Persistence — DB only, no localStorage ───────────────────────────────
 function saveState() {
-  localStorage.setItem(STORE_KEY, JSON.stringify({
-    sessionId,
-    results,
-    customer:  document.getElementById('info-customer').textContent,
-    address:   document.getElementById('info-address').textContent,
-    date:      document.getElementById('info-date').textContent,
-    agreement: document.getElementById('info-agreement').textContent,
-  }));
+  syncProject(); // persist to DB immediately
 }
 function clearState() {
-  localStorage.removeItem(STORE_KEY);
-}
-function restoreState() {
-  const raw = localStorage.getItem(STORE_KEY);
-  if (!raw) return false;
-  try {
-    const s = JSON.parse(raw);
-    if (!s.sessionId) return false;
-    sessionId = s.sessionId;
-    results   = s.results || {};
-
-    document.getElementById('info-customer').textContent  = s.customer  || '—';
-    document.getElementById('info-address').textContent   = s.address   || '—';
-    document.getElementById('info-date').textContent      = s.date      || '—';
-    document.getElementById('info-agreement').textContent = s.agreement || '—';
-
-    Object.values(results).forEach(r => updateTable(r));
-    updateStats();
-    showAppScreen();
-    return true;
-  } catch { return false; }
+  // nothing to clear locally — DB is the source of truth
 }
 
 // ── Landing ───────────────────────────────────────────────────────────────
-(function setupLanding() {
-  const zone  = document.getElementById('landing-drop');
-  const input = document.getElementById('landing-input');
+// Excel file is optional — remembered if selected before or after the PDF.
+let _pendingExcel = null;
+
+function _setupDropZone(zoneId, inputId, onFile) {
+  const zone  = document.getElementById(zoneId);
+  const input = document.getElementById(inputId);
+  if (!zone || !input) return;
   zone.addEventListener('dragover',  e => { e.preventDefault(); zone.classList.add('active'); });
   zone.addEventListener('dragleave', () => zone.classList.remove('active'));
-  zone.addEventListener('drop',      e => { e.preventDefault(); zone.classList.remove('active'); if (e.dataTransfer.files[0]) uploadAgreement(e.dataTransfer.files[0]); });
-  input.addEventListener('change',   e => { if (e.target.files[0]) uploadAgreement(e.target.files[0]); input.value = ''; });
-})();
+  zone.addEventListener('drop', e => {
+    e.preventDefault(); zone.classList.remove('active');
+    if (e.dataTransfer.files[0]) onFile(e.dataTransfer.files[0]);
+  });
+  input.addEventListener('change', e => {
+    if (e.target.files[0]) onFile(e.target.files[0]);
+    input.value = '';
+  });
+}
+
+function _markZoneReady(zoneId, badgeId, nameId, hintId, file) {
+  const zone  = document.getElementById(zoneId);
+  const badge = document.getElementById(badgeId);
+  const name  = document.getElementById(nameId);
+  const hint  = document.getElementById(hintId);
+  if (!zone) return;
+  zone.classList.add('ready');
+  if (hint)  hint.style.display  = 'none';
+  if (badge) badge.style.display = 'flex';
+  if (name)  name.textContent    = file.name;
+}
+
+// Excel zone — just stores the file, doesn't trigger anything
+_setupDropZone('zone-excel', 'landing-input-excel', file => {
+  _pendingExcel = file;
+  _markZoneReady('zone-excel', 'zone-excel-badge', 'zone-excel-name', 'zone-excel-hint', file);
+});
+
+// PDF zone — triggers the full upload flow immediately (original behaviour)
+_setupDropZone('zone-pdf', 'landing-input', file => {
+  _markZoneReady('zone-pdf', 'zone-pdf-badge', 'zone-pdf-name', 'zone-pdf-hint', file);
+  uploadAgreement(file);
+});
 
 async function uploadAgreement(file) {
   if (!file) return;
   const loading = document.getElementById('landing-loading');
+  const msg     = document.getElementById('landing-loading-msg');
   loading.classList.add('show');
-  const fd = new FormData();
-  fd.append('file', file);
+
   try {
-    const r    = await authFetch('/api/upload-agreement', { method: 'POST', body: fd });
+    // Step 1: upload PDF agreement
+    if (msg) msg.textContent = 'Reading agreement and extracting customer details…';
+    const fd = new FormData();
+    fd.append('file', file);
+    const r = await authFetch('/api/upload-agreement', { method: 'POST', body: fd });
     if (r.status === 401) { window.location.href = '/login'; return; }
     const data = await r.json();
-    sessionId  = data.session_id;
+    sessionId = data.session_id;
 
+    // Step 2: if an Excel was also selected, import it into the same session
+    if (_pendingExcel) {
+      if (msg) msg.textContent = 'Importing QC checklist from Excel…';
+      const fdXl = new FormData();
+      fdXl.append('file',       _pendingExcel);
+      fdXl.append('session_id', sessionId);
+      const rXl = await authFetch('/api/upload-excel', { method: 'POST', body: fdXl });
+      if (rXl.ok) {
+        const xlData = await rXl.json();
+        (xlData.results || []).forEach(r => {
+          results[r.key] = r;
+          updateTable(r);
+        });
+      }
+    }
+
+    // Populate sidebar
     document.getElementById('info-customer').textContent  = data.customer_name || '—';
     document.getElementById('info-address').textContent   = data.address        || '—';
     document.getElementById('info-date').textContent      = new Date().toLocaleDateString('en-AU');
     document.getElementById('info-agreement').textContent = file.name;
 
-    // Reset extra fields panel so stale values from a previous project don't show
+    // Reset extra fields panel
     ['field-quote-number','field-phone','field-email','field-system-price',
      'field-deposit','field-install-date','field-roof-type','field-stories',
      'field-phase','field-signed-by'].forEach(id => {
@@ -199,13 +224,14 @@ async function uploadAgreement(file) {
     setInfoField('field-phase',        'info-phase',        data.inverter_phase);
     setInfoField('field-signed-by',    'info-signed-by',    data.signed_by);
 
-    results = {};
+    updateStats();
     showAppScreen();
-    saveState();
+    syncProject();
   } catch (e) {
     alert('Upload failed: ' + e.message);
   } finally {
     loading.classList.remove('show');
+    if (msg) msg.textContent = 'Reading agreement and extracting customer details…';
   }
 }
 
@@ -346,7 +372,6 @@ async function startBatchUpload(file) {
 
   updateStats();
   refreshTableVisibility();
-  saveState();
   syncProject();
 
   const yes = allResults.filter(r => r.result === 'Yes').length;
@@ -401,8 +426,9 @@ document.getElementById('signout-modal').addEventListener('click', function(e) {
 });
 
 function clearUI() {
-  results   = {};
-  sessionId = null;
+  results       = {};
+  sessionId     = null;
+  _pendingExcel = null;
 
   // Reset table rows
   document.querySelectorAll('#results-tbody tr').forEach(row => {
@@ -422,6 +448,22 @@ function clearUI() {
   document.getElementById('info-date').textContent         = '—';
   document.getElementById('info-agreement').textContent    = '—';
   document.getElementById('landing-input').value           = '';
+  document.getElementById('landing-input-excel').value     = '';
+
+  // Reset upload zones
+  ['zone-pdf', 'zone-excel'].forEach(id => {
+    const z = document.getElementById(id);
+    if (z) z.classList.remove('ready', 'active');
+  });
+  ['zone-pdf-badge', 'zone-excel-badge'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
+  ['zone-pdf-hint', 'zone-excel-hint'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = '';
+  });
+
   refreshTableVisibility();
 }
 
