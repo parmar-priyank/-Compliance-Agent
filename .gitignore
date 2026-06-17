@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# Virtual environment
+venv/
+.venv/
+env/
+
+# Uploads (runtime session files)
+uploads/*
+!uploads/.gitkeep
+
+# Environment / secrets
+.env
+.env.*
+*.env
+
+# Database
+data/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

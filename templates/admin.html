@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin Dashboard — ADS Solar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="/static/css/auth.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☀️</text></svg>">
+</head>
+<body class="admin-body">
+
+<!-- ── TOP BAR ── -->
+<header class="admin-topbar">
+  <div class="admin-topbar-left">
+    <div class="admin-logo">☀️</div>
+    <span class="admin-brand">ADS Solar</span>
+    <span class="admin-brand-sub">Admin Dashboard</span>
+  </div>
+  <div class="admin-topbar-right">
+    <div class="admin-avatar" id="admin-avatar">A</div>
+    <div class="admin-user-info">
+      <span class="admin-user-name" id="admin-name">Admin</span>
+      <span class="admin-user-role">Administrator</span>
+    </div>
+    <button class="btn-logout" onclick="adminSignOut()">Sign out</button>
+  </div>
+</header>
+
+<div class="admin-layout">
+
+  <!-- ── SIDEBAR ── -->
+  <nav class="admin-sidebar">
+    <div class="admin-nav-item active" onclick="showTab('users')" id="nav-users">
+      <span class="nav-icon">👥</span> Users
+    </div>
+    <div class="admin-nav-item" onclick="showTab('projects')" id="nav-projects">
+      <span class="nav-icon">📋</span> Projects
+    </div>
+    <div class="admin-nav-item" onclick="showTab('backup')" id="nav-backup">
+      <span class="nav-icon">💾</span> Backup
+    </div>
+  </nav>
+
+  <!-- ── MAIN ── -->
+  <main class="admin-main">
+
+    <!-- ── STATS ROW ── -->
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-value" id="stat-total-users">—</div>
+        <div class="stat-label">Total Users</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="stat-active-users">—</div>
+        <div class="stat-label">Active Users</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="stat-total-projects">—</div>
+        <div class="stat-label">Total Projects</div>
+      </div>
+      <div class="stat-card accent">
+        <div class="stat-value" id="stat-checks-passed">—</div>
+        <div class="stat-label">Total Checks Passed</div>
+      </div>
+    </div>
+
+    <!-- ── USERS TAB ── -->
+    <div id="tab-users" class="admin-tab">
+      <div class="tab-header">
+        <div>
+          <h2 class="tab-title">Users</h2>
+          <p class="tab-desc">Manage who can access the application</p>
+        </div>
+        <button class="btn-add" onclick="openCreateUser()">+ Add User</button>
+      </div>
+
+      <div class="table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Role</th>
+              <th>Status</th>
+              <th>Created</th>
+              <th>Projects</th>
+              <th style="width:120px;">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="users-tbody">
+            <tr><td colspan="7" class="empty-row">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── PROJECTS TAB ── -->
+    <div id="tab-projects" class="admin-tab" style="display:none;">
+      <div class="tab-header">
+        <div>
+          <h2 class="tab-title">Projects</h2>
+          <p class="tab-desc">All QC compliance projects across all users</p>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Customer</th>
+              <th>Address</th>
+              <th>Date</th>
+              <th>Checked By</th>
+              <th>Agreement</th>
+              <th>Progress</th>
+              <th style="width:80px;">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="projects-tbody">
+            <tr><td colspan="7" class="empty-row">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── BACKUP TAB ── -->
+    <div id="tab-backup" class="admin-tab" style="display:none;">
+      <div class="tab-header">
+        <div>
+          <h2 class="tab-title">Backup &amp; Restore</h2>
+          <p class="tab-desc">Export or import the full database and all uploaded files</p>
+        </div>
+      </div>
+
+      <div class="backup-grid">
+
+        <!-- Download backup -->
+        <div class="backup-card">
+          <div class="backup-card-icon">⬇️</div>
+          <h3 class="backup-card-title">Download Backup</h3>
+          <p class="backup-card-desc">
+            Downloads a single <code>.zip</code> containing the database
+            (<code>data/app.db</code>) and all uploaded agreement files
+            (<code>uploads/</code>). Copy this file to any machine to move the app.
+          </p>
+          <button class="btn-add" onclick="downloadBackup()">Download Backup</button>
+        </div>
+
+        <!-- Restore backup -->
+        <div class="backup-card">
+          <div class="backup-card-icon">⬆️</div>
+          <h3 class="backup-card-title">Restore Backup</h3>
+          <p class="backup-card-desc">
+            Upload a previously downloaded <code>.zip</code> backup to restore all
+            data. <strong>This will overwrite the current database and files.</strong>
+            The server will need to be restarted after restore.
+          </p>
+          <div class="backup-drop" id="restore-drop" onclick="document.getElementById('restore-input').click()">
+            <div>📂 Click to select backup .zip</div>
+            <div class="backup-drop-hint">or drag and drop here</div>
+          </div>
+          <input type="file" id="restore-input" accept=".zip" style="display:none;">
+          <div id="restore-status" style="display:none;" class="restore-status"></div>
+        </div>
+
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ── USER MODAL ── -->
+<div class="modal-overlay" id="user-modal">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h3 id="modal-title">Add User</h3>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <form id="user-form" class="modal-form">
+      <input type="hidden" id="edit-user-id">
+      <div class="modal-grid">
+        <div class="form-group-modal">
+          <label>Full Name</label>
+          <input type="text" id="f-name" placeholder="John Smith" required>
+        </div>
+        <div class="form-group-modal">
+          <label>Email Address</label>
+          <input type="email" id="f-email" placeholder="john@adssolar.com" required>
+        </div>
+        <div class="form-group-modal">
+          <label>Role</label>
+          <select id="f-role">
+            <option value="user">User</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>
+        <div class="form-group-modal">
+          <label>Status</label>
+          <select id="f-active">
+            <option value="1">Active</option>
+            <option value="0">Inactive</option>
+          </select>
+        </div>
+        <div class="form-group-modal" style="grid-column:span 2;">
+          <label id="pw-label">Password</label>
+          <input type="password" id="f-password" placeholder="Min 6 characters">
+          <span class="form-hint" id="pw-hint"></span>
+        </div>
+      </div>
+      <div id="modal-error" class="modal-error" style="display:none;"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn-modal-cancel" onclick="closeModal()">Cancel</button>
+        <button type="button" class="btn-modal-save" onclick="saveUser()">Save User</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ── CONFIRM MODAL ── -->
+<div class="modal-overlay" id="confirm-modal">
+  <div class="modal-box modal-sm">
+    <div class="modal-head">
+      <h3 id="confirm-title">Confirm Delete</h3>
+      <button class="modal-close" onclick="closeConfirm()">✕</button>
+    </div>
+    <p id="confirm-body" class="confirm-body"></p>
+    <div class="modal-actions">
+      <button class="btn-modal-cancel" onclick="closeConfirm()">Cancel</button>
+      <button class="btn-danger" id="confirm-btn">Delete</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Auth ──
+function authToken() { return sessionStorage.getItem('qc_token') || ''; }
+function authHeaders(extra) {
+  const t = authToken();
+  return Object.assign(t ? { 'X-Auth-Token': t } : {}, extra || {});
+}
+function adminFetch(url, opts = {}) {
+  opts.headers = authHeaders(opts.headers);
+  return fetch(url, opts);
+}
+async function adminSignOut() {
+  await adminFetch('/api/logout', { method: 'POST' }).catch(() => {});
+  sessionStorage.removeItem('qc_token');
+  sessionStorage.removeItem('qc_role');
+  sessionStorage.removeItem('qc_name');
+  window.location.href = '/login';
+}
+
+// ── Boot: verify admin token then load data ──
+let _adminId = null;
+(async function bootAdmin() {
+  const token = authToken();
+  if (!token) { window.location.href = '/login'; return; }
+  const r = await fetch('/api/me', { headers: { 'X-Auth-Token': token } });
+  if (!r.ok) { window.location.href = '/login'; return; }
+  const me = await r.json();
+  if (me.role !== 'admin') { window.location.href = '/'; return; }
+  _adminId = me.id;
+  const name = me.name || '?';
+  document.getElementById('admin-name').textContent   = name;
+  document.getElementById('admin-avatar').textContent = name[0].toUpperCase();
+  loadData();
+})();
+
+// ── Load data ──
+async function loadData() {
+  const r    = await adminFetch('/admin/api/data');
+  const data = await r.json();
+  renderUsers(data.users, data.projects);
+  renderProjects(data.projects);
+  renderStats(data.users, data.projects);
+}
+
+function renderStats(users, projects) {
+  document.getElementById('stat-total-users').textContent   = users.length;
+  document.getElementById('stat-active-users').textContent  = users.filter(u => u.is_active).length;
+  document.getElementById('stat-total-projects').textContent = projects.length;
+  document.getElementById('stat-checks-passed').textContent  = projects.reduce((s, p) => s + (p.yes_count || 0), 0);
+}
+
+function renderUsers(users, projects) {
+  const tbody = document.getElementById('users-tbody');
+  if (!users.length) { tbody.innerHTML = '<tr><td colspan="7" class="empty-row">No users yet</td></tr>'; return; }
+  tbody.innerHTML = users.map(u => {
+    const projCount = projects.filter(p => p.user_id === u.id).length;
+    const isSelf    = u.id === _adminId;
+    return `<tr id="user-row-${u.id}">
+      <td><div class="user-cell"><div class="user-avatar-sm">${u.name[0].toUpperCase()}</div>${esc(u.name)}</div></td>
+      <td class="text-muted">${esc(u.email)}</td>
+      <td><span class="role-badge ${u.role}">${u.role}</span></td>
+      <td><span class="status-badge ${u.is_active ? 'active' : 'inactive'}">${u.is_active ? 'Active' : 'Inactive'}</span></td>
+      <td class="text-muted text-sm">${(u.created_at || '').slice(0, 10)}</td>
+      <td class="text-muted">${projCount}</td>
+      <td><div class="action-btns">
+        <button class="btn-edit" onclick="openEditUser(${u.id})">Edit</button>
+        ${isSelf ? '' : `<button class="btn-del" onclick="deleteUser(${u.id}, '${esc(u.name)}')">Delete</button>`}
+      </div></td>
+    </tr>`;
+  }).join('');
+}
+
+function renderProjects(projects) {
+  const tbody = document.getElementById('projects-tbody');
+  if (!projects.length) { tbody.innerHTML = '<tr><td colspan="7" class="empty-row">No projects yet</td></tr>'; return; }
+  tbody.innerHTML = projects.map(p => {
+    const done  = (p.yes_count || 0) + (p.no_count || 0) + (p.na_count || 0);
+    const pct   = Math.round(done / 32 * 100);
+    const uname = p.user_name  || '?';
+    const cust  = p.customer   || '—';
+    return `<tr id="proj-row-${p.id}">
+      <td><strong>${esc(cust)}</strong></td>
+      <td class="text-muted text-sm">${esc(p.address || '—')}</td>
+      <td class="text-muted text-sm">${(p.created_at || '').slice(0, 10)}</td>
+      <td><div class="user-cell"><div class="user-avatar-sm">${uname[0].toUpperCase()}</div><div>
+        <div>${esc(uname)}</div>
+        <div class="text-muted text-sm">${esc(p.user_email || '')}</div>
+      </div></div></td>
+      <td class="text-muted text-sm">${esc(p.agreement || '—')}</td>
+      <td><div class="progress-mini-wrap">
+        <div class="progress-mini-bar"><div class="progress-mini-fill" style="width:${pct}%"></div></div>
+        <div class="progress-mini-pills">
+          <span class="mini-pill yes">✓ ${p.yes_count || 0}</span>
+          <span class="mini-pill no">✗ ${p.no_count || 0}</span>
+          <span class="mini-pill na">– ${p.na_count || 0}</span>
+        </div>
+      </div></td>
+      <td><button class="btn-del" onclick="deleteProject(${p.id}, '${esc(cust)}')">Delete</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Tab switch ──
+function showTab(name) {
+  document.querySelectorAll('.admin-tab').forEach(t => t.style.display = 'none');
+  document.querySelectorAll('.admin-nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('tab-' + name).style.display = 'block';
+  document.getElementById('nav-' + name).classList.add('active');
+}
+
+// ── User modal ──
+function openCreateUser() {
+  document.getElementById('modal-title').textContent = 'Add User';
+  document.getElementById('edit-user-id').value = '';
+  document.getElementById('f-name').value = '';
+  document.getElementById('f-email').value = '';
+  document.getElementById('f-role').value = 'user';
+  document.getElementById('f-active').value = '1';
+  document.getElementById('f-password').value = '';
+  document.getElementById('f-active').parentElement.style.display = 'none';
+  document.getElementById('pw-label').textContent = 'Password *';
+  document.getElementById('pw-hint').textContent = '';
+  document.getElementById('modal-error').style.display = 'none';
+  document.getElementById('user-modal').classList.add('show');
+}
+
+async function openEditUser(id) {
+  const r    = await adminFetch(`/admin/api/users/${id}`);
+  const user = await r.json();
+  document.getElementById('modal-title').textContent = 'Edit User';
+  document.getElementById('edit-user-id').value = id;
+  document.getElementById('f-name').value   = user.name;
+  document.getElementById('f-email').value  = user.email;
+  document.getElementById('f-role').value   = user.role;
+  document.getElementById('f-active').value = String(user.is_active);
+  document.getElementById('f-password').value = '';
+  document.getElementById('f-active').parentElement.style.display = 'block';
+  document.getElementById('pw-label').textContent = 'New Password';
+  document.getElementById('pw-hint').textContent  = 'Leave blank to keep current password';
+  document.getElementById('modal-error').style.display = 'none';
+  document.getElementById('user-modal').classList.add('show');
+}
+
+function closeModal() {
+  document.getElementById('user-modal').classList.remove('show');
+}
+
+async function saveUser() {
+  const id     = document.getElementById('edit-user-id').value;
+  const name   = document.getElementById('f-name').value.trim();
+  const email  = document.getElementById('f-email').value.trim();
+  const role   = document.getElementById('f-role').value;
+  const active = document.getElementById('f-active').value;
+  const pw     = document.getElementById('f-password').value;
+
+  if (!name || !email) { showModalErr('Name and email are required.'); return; }
+  if (!id && !pw)       { showModalErr('Password is required for new users.'); return; }
+  if (pw && pw.length < 6) { showModalErr('Password must be at least 6 characters.'); return; }
+
+  let res;
+  if (id) {
+    res = await adminFetch(`/admin/api/users/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, email, role, is_active: active, password: pw })
+    });
+  } else {
+    const fd = new FormData();
+    fd.append('name', name); fd.append('email', email);
+    fd.append('password', pw); fd.append('role', role);
+    res = await adminFetch('/admin/api/users', { method: 'POST', body: fd });
+  }
+
+  const data = await res.json();
+  if (!data.ok) { showModalErr(data.message || data.error); return; }
+  closeModal();
+  loadData();
+}
+
+function showModalErr(msg) {
+  const el = document.getElementById('modal-error');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+// ── Delete user ──
+function deleteUser(id, name) {
+  document.getElementById('confirm-title').textContent = 'Delete User';
+  document.getElementById('confirm-body').textContent  = `Delete "${name}"? This will remove all their sessions. Projects will remain.`;
+  document.getElementById('confirm-btn').onclick = async () => {
+    await adminFetch(`/admin/api/users/${id}`, { method: 'DELETE' });
+    closeConfirm();
+    loadData();
+  };
+  document.getElementById('confirm-modal').classList.add('show');
+}
+
+// ── Delete project ──
+function deleteProject(id, name) {
+  document.getElementById('confirm-title').textContent = 'Delete Project';
+  document.getElementById('confirm-body').textContent  = `Delete project for "${name}"? This cannot be undone.`;
+  document.getElementById('confirm-btn').onclick = async () => {
+    await adminFetch(`/admin/api/projects/${id}`, { method: 'DELETE' });
+    closeConfirm();
+    loadData();
+  };
+  document.getElementById('confirm-modal').classList.add('show');
+}
+
+function closeConfirm() {
+  document.getElementById('confirm-modal').classList.remove('show');
+}
+
+['user-modal', 'confirm-modal'].forEach(id => {
+  document.getElementById(id).addEventListener('click', function(e) {
+    if (e.target === this) this.classList.remove('show');
+  });
+});
+
+// ── Backup ──
+async function downloadBackup() {
+  const btn = document.querySelector('[onclick="downloadBackup()"]');
+  const origText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Preparing…';
+  try {
+    const r = await adminFetch('/admin/backup');
+    if (!r.ok) throw new Error('Server returned ' + r.status);
+    const blob = await r.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    // Get filename from Content-Disposition header if present
+    const cd   = r.headers.get('Content-Disposition') || '';
+    const match = cd.match(/filename=([^\s;]+)/);
+    a.download = match ? match[1] : 'qc_backup.zip';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    // Revoke after a short delay so the browser can read the blob URL
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  } catch (e) {
+    alert('Backup failed: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = origText;
+  }
+}
+
+// ── Restore drag/drop + file input ──
+(function setupRestore() {
+  const drop  = document.getElementById('restore-drop');
+  const input = document.getElementById('restore-input');
+
+  drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('active'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('active'));
+  drop.addEventListener('drop', e => {
+    e.preventDefault(); drop.classList.remove('active');
+    const f = e.dataTransfer.files[0];
+    if (f) handleRestoreFile(f);
+  });
+  input.addEventListener('change', e => {
+    if (e.target.files[0]) handleRestoreFile(e.target.files[0]);
+    input.value = '';
+  });
+})();
+
+async function handleRestoreFile(file) {
+  if (!file.name.endsWith('.zip')) {
+    showRestoreStatus('error', 'Please select a .zip backup file.');
+    return;
+  }
+  showRestoreStatus('loading', 'Uploading and restoring… please wait.');
+  try {
+    const r    = await adminFetch('/admin/restore', { method: 'POST', body: file, headers: { 'Content-Type': 'application/zip' } });
+    const data = await r.json();
+    if (data.ok) {
+      showRestoreStatus('success', `Restore complete. ${data.files} files restored. Restart the server to apply all changes.`);
+    } else {
+      showRestoreStatus('error', data.error || 'Restore failed.');
+    }
+  } catch (e) {
+    showRestoreStatus('error', 'Upload failed: ' + e.message);
+  }
+}
+
+function showRestoreStatus(type, msg) {
+  const el = document.getElementById('restore-status');
+  el.style.display = 'block';
+  el.className = 'restore-status restore-' + type;
+  el.textContent = msg;
+}
+</script>
+</body>
+</html>

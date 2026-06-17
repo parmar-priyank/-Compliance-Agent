@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sign in — ADS Solar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="/static/css/auth.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☀️</text></svg>">
+</head>
+<body class="login-body">
+
+<div class="login-layout">
+
+  <!-- LEFT PANEL -->
+  <div class="login-left">
+    <div class="login-left-inner">
+      <div class="brand-logo">☀️</div>
+      <h1 class="brand-name">ADS Solar</h1>
+      <p class="brand-tagline">Automate Document Verification</p>
+      <div class="brand-features">
+        <div class="feature-item">
+          <div class="feature-icon">📋</div>
+          <div>
+            <div class="feature-title">QC Compliance Checks</div>
+            <div class="feature-desc">Verify 32 checklist items against signed agreements</div>
+          </div>
+        </div>
+        <div class="feature-item">
+          <div class="feature-icon">🤖</div>
+          <div>
+            <div class="feature-title">AI-Powered OCR</div>
+            <div class="feature-desc">Automated document reading and matching with Groq</div>
+          </div>
+        </div>
+        <div class="feature-item">
+          <div class="feature-icon">📊</div>
+          <div>
+            <div class="feature-title">Excel Reports</div>
+            <div class="feature-desc">Download formatted compliance reports instantly</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="login-right">
+    <div class="login-card">
+      <div class="login-card-logo">☀️</div>
+      <h2 class="login-title">Sign in</h2>
+      <p class="login-subtitle">Use your ADS Solar account</p>
+
+      <div class="login-error" id="login-error" style="display:none;">
+        <span class="error-icon">⚠</span> <span id="error-text"></span>
+      </div>
+
+      <form id="login-form" class="login-form">
+        <div class="form-group">
+          <label for="email">Email address</label>
+          <input type="email" name="email" id="email" placeholder="you@adssolar.com" required autocomplete="email">
+        </div>
+        <div class="form-group">
+          <label for="password">Password</label>
+          <div class="pw-wrapper">
+            <input type="password" name="password" id="password" placeholder="••••••••" required autocomplete="current-password">
+            <button type="button" class="toggle-pw" onclick="togglePw(this)">Show</button>
+          </div>
+        </div>
+        <button type="submit" class="btn-signin" id="signin-btn">Sign in</button>
+      </form>
+
+      <p class="login-footer">
+        &copy; 2026 ADS Solar · Automated Document Verification
+      </p>
+    </div>
+  </div>
+
+</div>
+
+<script>
+function togglePw(btn) {
+  const input = btn.previousElementSibling;
+  const show  = input.type === 'password';
+  input.type      = show ? 'text' : 'password';
+  btn.textContent = show ? 'Hide' : 'Show';
+}
+
+document.getElementById('login-form').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const btn     = document.getElementById('signin-btn');
+  const errDiv  = document.getElementById('login-error');
+  const errText = document.getElementById('error-text');
+
+  btn.disabled    = true;
+  btn.textContent = 'Signing in…';
+  errDiv.style.display = 'none';
+
+  const fd = new FormData(this);
+  try {
+    const res  = await fetch('/api/login', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (!data.ok) {
+      errText.textContent  = data.error || 'Login failed.';
+      errDiv.style.display = 'flex';
+      btn.disabled    = false;
+      btn.textContent = 'Sign in';
+      return;
+    }
+    // Store token per-tab in sessionStorage (never shared between tabs)
+    sessionStorage.setItem('qc_token', data.token);
+    sessionStorage.setItem('qc_role',  data.role);
+    sessionStorage.setItem('qc_name',  data.name);
+    window.location.href = data.role === 'admin' ? '/admin' : '/';
+  } catch {
+    errText.textContent  = 'Network error. Please try again.';
+    errDiv.style.display = 'flex';
+    btn.disabled    = false;
+    btn.textContent = 'Sign in';
+  }
+});
+</script>
+</body>
+</html>

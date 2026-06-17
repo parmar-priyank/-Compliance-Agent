@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Automate Document Verification — ADS Solar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="/static/css/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☀️</text></svg>">
+</head>
+<body>
+
+<!-- ── TOP BAR ── -->
+<div class="topbar">
+  <div class="topbar-logo">☀️</div>
+  <h1>Automate Document Verification</h1>
+  <div class="topbar-actions">
+    <div id="project-actions" style="display:none;">
+      <input type="file" id="batch-zip-input" accept=".zip" style="display:none;">
+      <button class="btn-topbar-primary" onclick="newProject()">+ New Project</button>
+    </div>
+    <div class="topbar-user">
+      <div class="topbar-avatar" id="topbar-avatar">?</div>
+      <span class="topbar-username" id="topbar-username"></span>
+      <button class="btn-topbar-logout" onclick="signOut()">Sign out</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── LANDING SCREEN ── -->
+<div id="landing-screen">
+
+  <div id="resume-banner" style="display:none;">
+    <div class="resume-card">
+      <div class="resume-left">
+        <div class="resume-icon">📂</div>
+        <div class="resume-info">
+          <div class="resume-title">Resume last project</div>
+          <div class="resume-customer" id="resume-customer">—</div>
+          <div class="resume-meta" id="resume-meta">—</div>
+        </div>
+      </div>
+      <div class="resume-actions">
+        <button class="btn btn-primary" onclick="resumeProject()">Resume</button>
+        <button class="btn btn-secondary" onclick="dismissResume()">Start Fresh</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="landing-wrap">
+    <div class="landing-card">
+      <div class="landing-icon">📋</div>
+      <h2>Start a New Project</h2>
+      <p>Upload the signed customer agreement PDF to begin. Customer details will be extracted automatically, then upload your ZIP of supporting documents to run all checks at once.</p>
+
+      <div class="landing-drop" id="landing-drop" onclick="document.getElementById('landing-input').click()">
+        <div class="landing-drop-icon">📄</div>
+        <div class="landing-drop-title">Drop the Signed Agreement here</div>
+        <div class="landing-drop-hint">PDF only · Click or drag to upload</div>
+      </div>
+      <input type="file" id="landing-input" accept=".pdf">
+
+      <div id="landing-loading" class="landing-loading">
+        <div class="spinner"></div>
+        <span>Reading agreement and extracting customer details…</span>
+      </div>
+    </div>
+
+    <div class="landing-steps">
+      <div class="step-item">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <div class="step-title">Upload Agreement</div>
+          <div class="step-desc">The signed PDF is your reference document for all checks.</div>
+        </div>
+      </div>
+      <div class="step-item">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <div class="step-title">Upload ZIP</div>
+          <div class="step-desc">Zip all supporting documents named by check key. AI verifies every item automatically.</div>
+        </div>
+      </div>
+      <div class="step-item">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <div class="step-title">Download Report</div>
+          <div class="step-desc">Export a formatted Excel report with all results and remarks.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── MAIN APP ── -->
+<div id="app-screen" style="display:none;">
+  <div class="layout">
+
+    <!-- ── SIDEBAR ── -->
+    <aside class="sidebar">
+      <div class="project-card">
+        <div class="project-card-header">
+          <div class="project-dot"></div>
+          <span>Active Project</span>
+        </div>
+        <div class="project-field">
+          <div class="project-label">Customer</div>
+          <div class="project-value" id="info-customer">—</div>
+        </div>
+        <div class="project-field">
+          <div class="project-label">Address</div>
+          <div class="project-value" id="info-address">—</div>
+        </div>
+        <div class="project-field">
+          <div class="project-label">Date</div>
+          <div class="project-value" id="info-date">—</div>
+        </div>
+        <div class="project-field">
+          <div class="project-label">Agreement</div>
+          <div class="project-value file-ref" id="info-agreement">—</div>
+        </div>
+        <button class="project-details-toggle" id="details-toggle" onclick="toggleProjectDetails()" style="display:none;">
+          Show more details ›
+        </button>
+
+        <div id="project-extra-fields" style="display:none;">
+          <div class="project-field" id="field-quote-number" style="display:none;">
+            <div class="project-label">Quote #</div>
+            <div class="project-value" id="info-quote-number">—</div>
+          </div>
+          <div class="project-field" id="field-phone" style="display:none;">
+            <div class="project-label">Phone</div>
+            <div class="project-value" id="info-phone">—</div>
+          </div>
+          <div class="project-field" id="field-email" style="display:none;">
+            <div class="project-label">Email</div>
+            <div class="project-value" id="info-email">—</div>
+          </div>
+          <div class="project-field" id="field-system-price" style="display:none;">
+            <div class="project-label">System Price</div>
+            <div class="project-value" id="info-system-price">—</div>
+          </div>
+          <div class="project-field" id="field-deposit" style="display:none;">
+            <div class="project-label">Deposit</div>
+            <div class="project-value" id="info-deposit">—</div>
+          </div>
+          <div class="project-field" id="field-install-date" style="display:none;">
+            <div class="project-label">Install Date</div>
+            <div class="project-value" id="info-install-date">—</div>
+          </div>
+          <div class="project-field" id="field-roof-type" style="display:none;">
+            <div class="project-label">Roof Type</div>
+            <div class="project-value" id="info-roof-type">—</div>
+          </div>
+          <div class="project-field" id="field-stories" style="display:none;">
+            <div class="project-label">Stories</div>
+            <div class="project-value" id="info-stories">—</div>
+          </div>
+          <div class="project-field" id="field-phase" style="display:none;">
+            <div class="project-label">Phase</div>
+            <div class="project-value" id="info-phase">—</div>
+          </div>
+          <div class="project-field" id="field-signed-by" style="display:none;">
+            <div class="project-label">Signed By</div>
+            <div class="project-value" id="info-signed-by">—</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ZIP upload prompt in sidebar -->
+      <div class="sidebar-zip-prompt" id="sidebar-zip-prompt">
+        <div class="zip-prompt-icon">📦</div>
+        <div class="zip-prompt-text">Upload your ZIP of supporting documents to run all checks</div>
+        <button class="btn btn-primary btn-zip-sidebar" onclick="document.getElementById('batch-zip-input').click()">⚡ Upload ZIP</button>
+      </div>
+    </aside>
+
+    <!-- ── MAIN — Results only ── -->
+    <main class="main">
+      <div class="results-header">
+        <h2>Results</h2>
+        <div class="stat-pills">
+          <div class="stat-pill yes" id="stat-yes">✓ 0 Yes</div>
+          <div class="stat-pill no"  id="stat-no">✗ 0 No</div>
+          <div class="stat-pill na"  id="stat-na">– 0 N/A</div>
+        </div>
+        <button class="btn btn-dark" onclick="downloadExcel()" style="margin-left:auto;">⬇ Download Excel</button>
+      </div>
+
+      <!-- Empty state shown before any results -->
+      <div id="results-empty" class="empty-state" style="padding:80px 24px;">
+        <div class="big">📦</div>
+        <h3>No results yet</h3>
+        <p>Upload a ZIP of supporting documents using the "Upload ZIP" button above to run all checks automatically.</p>
+      </div>
+
+      <div class="results-table-wrap" id="results-table-wrap" style="display:none;">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:48px;">#</th>
+              <th>Checklist Item</th>
+              <th style="width:82px;">Result</th>
+              <th>File</th>
+              <th>Remark</th>
+            </tr>
+          </thead>
+          <tbody id="results-tbody">
+            {% for item in qc_items %}
+            <tr id="row-{{ item.key }}">
+              <td class="td-sno">{{ item.sno }}</td>
+              <td>{{ item.label }}</td>
+              <td><span class="td-result pending">—</span></td>
+              <td class="td-file">—</td>
+              <td class="td-remark">—</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- ── Sign Out Modal ── -->
+<div class="modal-overlay" id="signout-modal">
+  <div class="modal">
+    <div class="modal-icon">🔒</div>
+    <h3>Sign out?</h3>
+    <p id="signout-modal-body">Your current progress will be saved automatically before signing out.</p>
+    <div class="modal-actions modal-actions-col">
+      <button class="btn btn-primary" id="signout-confirm-btn" onclick="confirmSignOut()">Save &amp; Sign out</button>
+      <button class="btn btn-ghost" onclick="closeSignOutModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── New Project Modal ── -->
+<div class="modal-overlay" id="new-project-modal">
+  <div class="modal">
+    <div class="modal-icon">💾</div>
+    <h3>Start a new project?</h3>
+    <p><strong>Save &amp; Start New</strong> — keeps results in the database so you can resume later.<br><br><strong>Discard &amp; Start New</strong> — permanently deletes all results and files for this project.</p>
+    <div class="modal-actions modal-actions-col">
+      <button class="btn btn-primary" onclick="confirmNewProject('save')">Save &amp; Start New</button>
+      <button class="btn btn-secondary" onclick="confirmNewProject('discard')">Discard &amp; Start New</button>
+      <button class="btn btn-ghost" onclick="closeNewProjectModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Batch Upload Progress Modal ── -->
+<div class="modal-overlay" id="batch-modal">
+  <div class="modal batch-modal-inner">
+    <div class="modal-icon">⚡</div>
+    <h3>Processing ZIP</h3>
+    <p id="batch-modal-status">Uploading and running all checks…</p>
+    <div class="progress-bar" style="margin:16px 0 6px;">
+      <div class="progress-fill" id="batch-progress-fill" style="width:0%;transition:width 0.35s;"></div>
+    </div>
+    <div class="batch-progress-label" id="batch-progress-label">0 / 0</div>
+    <div id="batch-log" class="batch-log"></div>
+    <div class="modal-actions" id="batch-modal-actions" style="display:none;">
+      <button class="btn btn-primary" onclick="closeBatchModal()">View Results</button>
+    </div>
+  </div>
+</div>
+
+<script>window.__QC_ITEMS__ = {{ qc_items | tojson }};</script>
+<script src="/static/js/app.js"></script>
+</body>
+</html>
