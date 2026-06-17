@@ -434,7 +434,7 @@ async def check_document(
     if check_key in P.OCR_RULE_KEYS:
         if not api_key:
             raise HTTPException(400, "Groq API key required for OCR")
-        if check_key in ("storey_roof", "scissor_lift"):
+        if check_key in ("storey_roof", "scissor_lift", "tilt_frame"):
             doc_text = ocr_file_with_groq(dest, api_key, prompt=P.STOREY_PROMPT)
         else:
             doc_text = ocr_file_with_groq(dest, api_key)
@@ -730,7 +730,7 @@ async def batch_check(
 
     # Files that should run two checks from one image
     DUAL_KEY_MAP = {
-        "roof_pic": ["roof_pic", "storey_roof", "scissor_lift"],
+        "roof_pic": ["roof_pic", "storey_roof", "scissor_lift", "tilt_frame"],
     }
 
     def _resolve_keys(stem_lower: str) -> list[str]:
@@ -804,7 +804,7 @@ async def batch_check(
                     if not api_key:
                         results_list.append(_save("N/A", "Groq API key not configured — skipped"))
                         continue
-                    ocr_prompt = P.STOREY_PROMPT if check_key in ("storey_roof", "scissor_lift") else None
+                    ocr_prompt = P.STOREY_PROMPT if check_key in ("storey_roof", "scissor_lift", "tilt_frame") else None
                     cache_key  = ocr_prompt or "__default__"
                     if cache_key not in cached_ocr:
                         cached_ocr[cache_key] = ocr_file_with_groq(dest, api_key, prompt=ocr_prompt)

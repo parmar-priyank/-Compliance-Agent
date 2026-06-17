@@ -32,7 +32,7 @@ VALID_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png"}
 # Everything else → OCR the file, then call the Groq LLM.
 
 NO_OCR_KEYS   = {"signed_agreement", "meter_photo", "roof_pic"}
-OCR_RULE_KEYS = {"deposit", "phase_upgrade", "storey_roof", "electricity_bill", "rate_notice", "scissor_lift"}
+OCR_RULE_KEYS = {"deposit", "phase_upgrade", "storey_roof", "electricity_bill", "rate_notice", "scissor_lift", "tilt_frame"}
 
 
 # ── AI / Vision prompts ──────────────────────────────────────────────────────
@@ -554,6 +554,40 @@ def run_item_rule(check_key: str, filename: str, doc_text: str, agreement_text: 
             return {"result": "No",  "remark": combined_remark}
         # One passed, one failed → N/A with remark explaining what's wrong
         return {"result": "N/A", "remark": combined_remark}
+
+    # ── tilt_frame: required for metal roofs, not tile roofs ─────────────────
+    # Triggered by house.png — vision model detects roof type from the image.
+    # Fallback: roof_type from quote_data (extracted from the agreement PDF).
+    if check_key == "tilt_frame":
+        detected_roof = ""
+        doc_lower = doc_text.lower()
+
+        # Parse vision model response (STOREY_PROMPT returns "ROOF TYPE: <value>")
+        for line in doc_text.splitlines():
+            if line.strip().lower().startswith("roof type:"):
+                detected_roof = line.split(":", 1)[-1].strip().lower()
+                break
+
+        # Fallback: use roof_type from quote_data
+        if not detected_roof and quote:
+            detected_roof = str(quote.get("roof_type") or "").strip().lower()
+
+        if not detected_roof:
+            return {"result": "N/A", "remark": "Could not determine roof type from house image or agreement — check manually"}
+
+        # Normalise synonyms so future roof type names resolve correctly
+        TILE_KEYWORDS  = ("tile", "terracotta", "concrete tile", "clay", "slate", "terra cotta")
+        METAL_KEYWORDS = ("tin", "metal", "colorbond", "colour bond", "color bond", "iron",
+                          "zincalume", "steel", "clip lock", "cliplock", "corrugated")
+
+        is_tile  = any(w in detected_roof for w in TILE_KEYWORDS)
+        is_metal = any(w in detected_roof for w in METAL_KEYWORDS)
+
+        if is_tile:
+            return {"result": "No",  "remark": f"Roof is '{detected_roof}' (tile) — Clip Lock / Tilt Frame is for metal roofs only, not required"}
+        if is_metal:
+            return {"result": "Yes", "remark": f"Roof is '{detected_roof}' (metal) — Clip Lock / Tilt Frame required"}
+        return {"result": "N/A", "remark": f"Roof type '{detected_roof}' unrecognised — check Tilt Frame / Clip Lock compatibility manually"}
 
     # ── scissor_lift: required if house is 2+ storeys ────────────────────────
     # Triggered by house.png (same image as roof_pic / storey_roof).
