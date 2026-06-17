@@ -32,7 +32,7 @@ VALID_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png"}
 # Everything else → OCR the file, then call the Groq LLM.
 
 NO_OCR_KEYS   = {"signed_agreement", "meter_photo", "roof_pic"}
-OCR_RULE_KEYS = {"deposit", "phase_upgrade", "storey_roof", "electricity_bill", "rate_notice", "scissor_lift", "tilt_frame"}
+OCR_RULE_KEYS = {"deposit", "phase_upgrade", "storey_roof", "electricity_bill", "rate_notice", "scissor_lift", "tilt_frame", "meter_approval"}
 
 
 # ── AI / Vision prompts ──────────────────────────────────────────────────────
@@ -554,6 +554,57 @@ def run_item_rule(check_key: str, filename: str, doc_text: str, agreement_text: 
             return {"result": "No",  "remark": combined_remark}
         # One passed, one failed → N/A with remark explaining what's wrong
         return {"result": "N/A", "remark": combined_remark}
+
+    # ── meter_approval: parse AusNet (or similar) approval letter ───────────
+    # Approved signals: "Generation Connection Contract", "Congratulations",
+    #   a Reference Number present, and approved capacity > 0.
+    # Rejected signals: explicit rejection/refusal language.
+    if check_key == "meter_approval":
+        if not doc_text.strip():
+            return {"result": "No", "remark": f"Could not extract text from {filename} — check manually"}
+
+        doc_lower = doc_text.lower()
+
+        REJECT_PATTERNS = [
+            r'\brejected?\b', r'\brefused?\b', r'\bnot approved\b',
+            r'\bcannot approve\b', r'\bdeclined?\b', r'\bunsuccessful\b',
+            r'\bapplication.*denied\b', r'\bdenied\b',
+        ]
+        for pat in REJECT_PATTERNS:
+            if re.search(pat, doc_lower):
+                snippet = ""
+                m = re.search(pat, doc_lower)
+                if m:
+                    snippet = doc_text[max(0, m.start()-30):m.end()+60].strip().replace("\n", " ")
+                return {"result": "No", "remark": f"Meter approval rejected — '{snippet[:120]}'"}
+
+        APPROVAL_SIGNALS = [
+            r'generation connection contract',
+            r'congratulations',
+            r'reference number\s*[:\-]?\s*\w+',
+            r'approved capacity',
+            r'you have now entered into',
+            r'pre.?approval',
+        ]
+        matched = [pat for pat in APPROVAL_SIGNALS if re.search(pat, doc_lower)]
+
+        # Also check that at least one capacity value > 0 appears
+        capacity_values = re.findall(r'\b(\d+(?:\.\d+)?)\s*(?:kva|kw)\b', doc_lower)
+        has_capacity = any(float(v) > 0 for v in capacity_values if v)
+
+        ref_match = re.search(r'reference\s*(?:number|no\.?)\s*[:\-]?\s*([A-Z0-9]+)', doc_text, re.IGNORECASE)
+        ref_num = ref_match.group(1) if ref_match else ""
+
+        if len(matched) >= 2 or (matched and has_capacity):
+            remark = "Meter approved"
+            if ref_num:
+                remark += f" — Ref: {ref_num}"
+            if has_capacity and capacity_values:
+                total = next((v for v in reversed(capacity_values)), "")
+                remark += f" — Capacity: {total} kVA"
+            return {"result": "Yes", "remark": remark}
+
+        return {"result": "N/A", "remark": f"Could not confirm approval status from {filename} — check manually"}
 
     # ── tilt_frame: required for metal roofs, not tile roofs ─────────────────
     # Triggered by house.png — vision model detects roof type from the image.

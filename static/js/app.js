@@ -119,89 +119,34 @@ function clearState() {
   // nothing to clear locally — DB is the source of truth
 }
 
-// ── Landing ───────────────────────────────────────────────────────────────
-// Excel file is optional — remembered if selected before or after the PDF.
-let _pendingExcel = null;
-
-function _setupDropZone(zoneId, inputId, onFile) {
-  const zone  = document.getElementById(zoneId);
-  const input = document.getElementById(inputId);
+// ── Landing — PDF upload ──────────────────────────────────────────────────
+(function setupLanding() {
+  const zone  = document.getElementById('landing-drop');
+  const input = document.getElementById('landing-input');
   if (!zone || !input) return;
   zone.addEventListener('dragover',  e => { e.preventDefault(); zone.classList.add('active'); });
   zone.addEventListener('dragleave', () => zone.classList.remove('active'));
-  zone.addEventListener('drop', e => {
-    e.preventDefault(); zone.classList.remove('active');
-    if (e.dataTransfer.files[0]) onFile(e.dataTransfer.files[0]);
-  });
-  input.addEventListener('change', e => {
-    if (e.target.files[0]) onFile(e.target.files[0]);
-    input.value = '';
-  });
-}
-
-function _markZoneReady(zoneId, badgeId, nameId, hintId, file) {
-  const zone  = document.getElementById(zoneId);
-  const badge = document.getElementById(badgeId);
-  const name  = document.getElementById(nameId);
-  const hint  = document.getElementById(hintId);
-  if (!zone) return;
-  zone.classList.add('ready');
-  if (hint)  hint.style.display  = 'none';
-  if (badge) badge.style.display = 'flex';
-  if (name)  name.textContent    = file.name;
-}
-
-// Excel zone — just stores the file, doesn't trigger anything
-_setupDropZone('zone-excel', 'landing-input-excel', file => {
-  _pendingExcel = file;
-  _markZoneReady('zone-excel', 'zone-excel-badge', 'zone-excel-name', 'zone-excel-hint', file);
-});
-
-// PDF zone — triggers the full upload flow immediately (original behaviour)
-_setupDropZone('zone-pdf', 'landing-input', file => {
-  _markZoneReady('zone-pdf', 'zone-pdf-badge', 'zone-pdf-name', 'zone-pdf-hint', file);
-  uploadAgreement(file);
-});
+  zone.addEventListener('drop',      e => { e.preventDefault(); zone.classList.remove('active'); if (e.dataTransfer.files[0]) uploadAgreement(e.dataTransfer.files[0]); });
+  input.addEventListener('change',   e => { if (e.target.files[0]) uploadAgreement(e.target.files[0]); input.value = ''; });
+})();
 
 async function uploadAgreement(file) {
   if (!file) return;
   const loading = document.getElementById('landing-loading');
-  const msg     = document.getElementById('landing-loading-msg');
   loading.classList.add('show');
-
+  const fd = new FormData();
+  fd.append('file', file);
   try {
-    // Step 1: upload PDF agreement
-    if (msg) msg.textContent = 'Reading agreement and extracting customer details…';
-    const fd = new FormData();
-    fd.append('file', file);
-    const r = await authFetch('/api/upload-agreement', { method: 'POST', body: fd });
+    const r    = await authFetch('/api/upload-agreement', { method: 'POST', body: fd });
     if (r.status === 401) { window.location.href = '/login'; return; }
     const data = await r.json();
-    sessionId = data.session_id;
+    sessionId  = data.session_id;
 
-    // Step 2: if an Excel was also selected, import it into the same session
-    if (_pendingExcel) {
-      if (msg) msg.textContent = 'Importing QC checklist from Excel…';
-      const fdXl = new FormData();
-      fdXl.append('file',       _pendingExcel);
-      fdXl.append('session_id', sessionId);
-      const rXl = await authFetch('/api/upload-excel', { method: 'POST', body: fdXl });
-      if (rXl.ok) {
-        const xlData = await rXl.json();
-        (xlData.results || []).forEach(r => {
-          results[r.key] = r;
-          updateTable(r);
-        });
-      }
-    }
-
-    // Populate sidebar
     document.getElementById('info-customer').textContent  = data.customer_name || '—';
     document.getElementById('info-address').textContent   = data.address        || '—';
     document.getElementById('info-date').textContent      = new Date().toLocaleDateString('en-AU');
     document.getElementById('info-agreement').textContent = file.name;
 
-    // Reset extra fields panel
     ['field-quote-number','field-phone','field-email','field-system-price',
      'field-deposit','field-install-date','field-roof-type','field-stories',
      'field-phase','field-signed-by'].forEach(id => {
@@ -224,6 +169,7 @@ async function uploadAgreement(file) {
     setInfoField('field-phase',        'info-phase',        data.inverter_phase);
     setInfoField('field-signed-by',    'info-signed-by',    data.signed_by);
 
+    results = {};
     updateStats();
     showAppScreen();
     syncProject();
@@ -231,7 +177,48 @@ async function uploadAgreement(file) {
     alert('Upload failed: ' + e.message);
   } finally {
     loading.classList.remove('show');
-    if (msg) msg.textContent = 'Reading agreement and extracting customer details…';
+  }
+}
+
+// ── Topbar Excel Import ───────────────────────────────────────────────────
+(function setupTopbarExcel() {
+  const input = document.getElementById('topbar-excel-input');
+  if (!input) return;
+  input.addEventListener('change', e => {
+    if (e.target.files[0]) importExcel(e.target.files[0]);
+    input.value = '';
+  });
+})();
+
+async function importExcel(file) {
+  if (!sessionId) { alert('Please upload the signed agreement first.'); return; }
+  const btn = document.getElementById('btn-import-excel');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Importing…'; }
+
+  try {
+    const fd = new FormData();
+    fd.append('file',       file);
+    fd.append('session_id', sessionId);
+    const r    = await authFetch('/api/upload-excel', { method: 'POST', body: fd });
+    if (r.status === 401) { window.location.href = '/login'; return; }
+    const data = await r.json();
+    if (!data.ok) { alert('Import failed: ' + (data.error || 'Unknown error')); return; }
+
+    (data.results || []).forEach(item => {
+      results[item.key] = item;
+      updateTable(item);
+    });
+
+    updateStats();
+    refreshTableVisibility();
+    syncProject();
+
+    const count = (data.results || []).length;
+    if (btn) btn.textContent = `✓ ${count} imported`;
+    setTimeout(() => { if (btn) { btn.disabled = false; btn.textContent = '📊 Import Excel'; } }, 2500);
+  } catch (e) {
+    alert('Import failed: ' + e.message);
+    if (btn) { btn.disabled = false; btn.textContent = '📊 Import Excel'; }
   }
 }
 
@@ -447,23 +434,7 @@ function clearUI() {
   document.getElementById('info-address').textContent      = '—';
   document.getElementById('info-date').textContent         = '—';
   document.getElementById('info-agreement').textContent    = '—';
-  document.getElementById('landing-input').value           = '';
-  document.getElementById('landing-input-excel').value     = '';
-
-  // Reset upload zones
-  ['zone-pdf', 'zone-excel'].forEach(id => {
-    const z = document.getElementById(id);
-    if (z) z.classList.remove('ready', 'active');
-  });
-  ['zone-pdf-badge', 'zone-excel-badge'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.style.display = 'none';
-  });
-  ['zone-pdf-hint', 'zone-excel-hint'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.style.display = '';
-  });
-
+  document.getElementById('landing-input').value = '';
   refreshTableVisibility();
 }
 

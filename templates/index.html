@@ -18,6 +18,8 @@
   <div class="topbar-actions">
     <div id="project-actions" style="display:none;">
       <input type="file" id="batch-zip-input" accept=".zip" style="display:none;">
+      <input type="file" id="topbar-excel-input" accept=".xlsx,.xls" style="display:none;">
+      <button class="btn-topbar-secondary" id="btn-import-excel" onclick="document.getElementById('topbar-excel-input').click()">📊 Import Excel</button>
       <button class="btn-topbar-primary" onclick="newProject()">+ New Project</button>
     </div>
     <div class="topbar-user">
@@ -52,35 +54,14 @@
     <div class="landing-card">
       <div class="landing-icon">📋</div>
       <h2>Start a New Project</h2>
-      <p>Upload the signed customer agreement PDF to begin. Optionally attach a QC checklist Excel to pre-fill results, then upload your ZIP of supporting documents.</p>
+      <p>Upload the signed customer agreement PDF to begin. Customer details will be extracted automatically, then upload your ZIP of supporting documents to run all checks at once.</p>
 
-      <div class="upload-grid">
-
-        <!-- PDF Upload — required, triggers immediately -->
-        <div class="upload-zone upload-zone-pdf" id="zone-pdf" onclick="document.getElementById('landing-input').click()">
-          <input type="file" id="landing-input" accept=".pdf" style="display:none;">
-          <div class="upload-zone-icon">📄</div>
-          <div class="upload-zone-title">Signed Agreement <span class="badge-required">Required</span></div>
-          <div class="upload-zone-hint" id="zone-pdf-hint">PDF only · Click or drag to upload</div>
-          <div class="upload-zone-badge" id="zone-pdf-badge" style="display:none;">
-            <span class="badge-check">✓</span>
-            <span id="zone-pdf-name"></span>
-          </div>
-        </div>
-
-        <!-- Excel Upload — optional -->
-        <div class="upload-zone upload-zone-excel" id="zone-excel" onclick="document.getElementById('landing-input-excel').click()">
-          <input type="file" id="landing-input-excel" accept=".xlsx,.xls" style="display:none;">
-          <div class="upload-zone-icon">📊</div>
-          <div class="upload-zone-title">QC Checklist Excel <span class="badge-optional">Optional</span></div>
-          <div class="upload-zone-hint" id="zone-excel-hint">.xlsx · Pre-fill results from existing checklist</div>
-          <div class="upload-zone-badge" id="zone-excel-badge" style="display:none;">
-            <span class="badge-check badge-check-green">✓</span>
-            <span id="zone-excel-name"></span>
-          </div>
-        </div>
-
+      <div class="landing-drop" id="landing-drop" onclick="document.getElementById('landing-input').click()">
+        <div class="landing-drop-icon">📄</div>
+        <div class="landing-drop-title">Drop the Signed Agreement here</div>
+        <div class="landing-drop-hint">PDF only · Click or drag to upload</div>
       </div>
+      <input type="file" id="landing-input" accept=".pdf">
 
       <div id="landing-loading" class="landing-loading">
         <div class="spinner"></div>
@@ -99,22 +80,22 @@
       <div class="step-item">
         <div class="step-num">2</div>
         <div class="step-body">
-          <div class="step-title">Upload ZIP</div>
-          <div class="step-desc">Zip all supporting documents named by check key. AI verifies every item automatically.</div>
+          <div class="step-title">Import Excel</div>
+          <div class="step-desc">Use the "Import Excel" button in the top bar to pre-fill results from an existing QC checklist.</div>
         </div>
       </div>
       <div class="step-item">
         <div class="step-num">3</div>
         <div class="step-body">
-          <div class="step-title">Download Report</div>
-          <div class="step-desc">Export a formatted Excel report with all results and remarks.</div>
+          <div class="step-title">Upload ZIP</div>
+          <div class="step-desc">Zip all supporting documents named by check key. AI verifies every item automatically.</div>
         </div>
       </div>
       <div class="step-item">
-        <div class="step-num" style="background:#16a34a;">+</div>
+        <div class="step-num">4</div>
         <div class="step-body">
-          <div class="step-title">Optional: Import Excel</div>
-          <div class="step-desc">Already have a filled checklist? Drop it in the Excel zone to pre-fill all results instantly.</div>
+          <div class="step-title">Download Report</div>
+          <div class="step-desc">Export a formatted Excel report with all results and remarks.</div>
         </div>
       </div>
     </div>
